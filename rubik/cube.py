@@ -16,7 +16,7 @@ class Face:
 
     def rotate(self, direction):
         if self.transversal_faces is None:
-            raise Exception("You must first set the transversal faces")
+            raise Exception("You must first set the transversal facelets")
         if direction == 1:
             self.value = np.rot90(self.value, axes=(1, 0))
             last_face = self.transversal_faces[3].value[0, :, :].copy()
@@ -69,7 +69,7 @@ class Cube:
         self.L = Face(color=l_color, alias='l')
         self.B = Face(color=b_color, alias='b')
 
-        # Assign the faces in clockwise order the front value
+        # Assign the facelets in clockwise order the front value
         self.F.set_transversals([self.U, self.R, self.D, self.L])
         self.U.set_transversals([self.B, self.R, self.F, self.L])
         self.R.set_transversals([self.U, self.B, self.D, self.F])
@@ -92,12 +92,12 @@ class Cube:
             "B'": lambda: self.B.rotate(-1)
         }
         self.valid_moves = ["F", "F'", "U", "U'", "R", "R'", "D", "D'", "L", "L'", "B", "B'"]
-        self.faces = [self.get_facelet()]
+        self.facelets = [self.get_facelet()]
         self.solution = []
 
     def reset(self):
         self.F.reset()
-        del self.faces[1:]
+        del self.facelets[1:]
         del self.solution[:]
 
     def move(self, move):
@@ -132,11 +132,11 @@ class Cube:
             self.move_funcs[move]()
             facelet = self.get_facelet()
             if avoid_repeated:
-                while facelet in self.faces:
+                while facelet in self.facelets:
                     undo_move = move.replace("'", '') if move[-1] == "'" else f"{move}'"
                     self.move(undo_move)
                     move = self.valid_moves[randint(0, 11)]
                     self.move(move)
                     facelet = self.get_facelet()
             self.solution.insert(0, move.replace("'", '') if move[-1] == "'" else move + "'")
-            self.faces.append(facelet)
+            self.facelets.append(facelet)

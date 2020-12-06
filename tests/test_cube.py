@@ -64,8 +64,8 @@ def test_scramble():
     n_moves = 4096
     cube.reset()
     cube.scramble(n_moves)
-    len(cube.faces) != len({facelet for facelet in cube.faces})
+    len(cube.facelets) != len({facelet for facelet in cube.facelets})
 
     cube.reset()
     cube.scramble(n_moves, avoid_repeated=True)
-    len(cube.faces) == len({facelet for facelet in cube.faces})
+    len(cube.facelets) == len({facelet for facelet in cube.facelets})
