@@ -4,9 +4,7 @@ version = "0.1.0"
 description = "Rubik's Cube study and ML-based solver"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "numpy>=1.26.0",
-]
+dependencies = []
 
 [build-system]
 requires = ["hatchling"]

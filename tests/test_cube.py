@@ -1,12 +1,13 @@
-"""Unit tests for the functional stateless Rubik's cube representation."""
+"""Unit tests for the pure Python functional Rubik's cube representation."""
 
-import numpy as np
-import pytest
+from operator import itemgetter
 from random import choices
+import pytest
 
 from rubik.cube import (
+    GETTERS,
+    GETTER_LIST,
     INVERSE_MOVES,
-    MOVE_ARRAY,
     PERMUTATIONS,
     SOLVED_FACELET,
     VALID_MOVES,
@@ -23,20 +24,21 @@ from rubik.cube import (
 
 def test_permutations_are_valid_bijections():
     """Verify each permutation is a bijection over indices 0..53."""
+    expected = list(range(54))
     for move in VALID_MOVES:
         perm = PERMUTATIONS[move]
         assert len(perm) == 54
-        assert len(set(perm.tolist())) == 54
-        assert np.array_equal(np.sort(perm), np.arange(54))
+        assert len(set(perm)) == 54
+        assert sorted(perm) == expected
 
 
 def test_inverses():
     """Verify that every move followed by its inverse yields identity."""
-    identity = np.arange(54)
+    identity = tuple(range(54))
     for move in VALID_MOVES:
         inv_move = INVERSE_MOVES[move]
         res = apply_move(apply_move(identity, move), inv_move)
-        assert np.array_equal(res, identity)
+        assert res == identity
 
 
 def test_apply_moves_and_composition():
@@ -46,9 +48,9 @@ def test_apply_moves_and_composition():
 
     seq_state = apply_moves(state, moves)
     composed_perm = compose_moves(moves)
-    composed_state = state[composed_perm]
+    composed_state = itemgetter(*composed_perm)(state)
 
-    assert np.array_equal(seq_state, composed_state)
+    assert seq_state == composed_state
 
 
 def test_facelet_string_roundtrip():
@@ -56,7 +58,7 @@ def test_facelet_string_roundtrip():
     state = create_solved_cube()
     s = to_facelet_string(state)
     assert s == SOLVED_FACELET
-    assert np.array_equal(from_facelet_string(s), state)
+    assert from_facelet_string(s) == state
 
 
 def test_scramble_roundtrip():
@@ -76,23 +78,24 @@ def test_scramble_avoid_repeated():
 
 
 def test_apply_move_batch():
-    """Verify batch move execution on (batch_size, 54) array."""
+    """Verify batch move execution on a list of state tuples."""
     batch_size = 10
     base_state = create_solved_cube()
-    batch = np.tile(base_state, (batch_size, 1))
+    batch = [base_state for _ in range(batch_size)]
 
     for move in VALID_MOVES:
         batch_res = apply_move_batch(batch, move)
         single_res = apply_move(base_state, move)
-        for i in range(batch_size):
-            assert np.array_equal(batch_res[i], single_res)
+        assert len(batch_res) == batch_size
+        for item in batch_res:
+            assert item == single_res
 
 
 @pytest.mark.parametrize("n_moves", [10, 50, 100, 500, 1000])
 def test_conjugate_inverse_reconstruction(n_moves):
     """Verify that applying inverse movements in reverse order reconstructs the exact initial state."""
     # Test on unique sticker IDs (0..53) to verify zero permutation drift
-    initial_ids = np.arange(54, dtype=np.int64)
+    initial_ids = tuple(range(54))
     initial_colors = create_solved_cube()
 
     scramble_moves = choices(VALID_MOVES, k=n_moves)
@@ -101,6 +104,6 @@ def test_conjugate_inverse_reconstruction(n_moves):
     reconstructed_ids = apply_moves(apply_moves(initial_ids, scramble_moves), inverse_moves)
     reconstructed_colors = apply_moves(apply_moves(initial_colors, scramble_moves), inverse_moves)
 
-    assert np.array_equal(reconstructed_ids, initial_ids)
-    assert np.array_equal(reconstructed_colors, initial_colors)
+    assert reconstructed_ids == initial_ids
+    assert reconstructed_colors == initial_colors
     assert to_facelet_string(reconstructed_colors) == SOLVED_FACELET

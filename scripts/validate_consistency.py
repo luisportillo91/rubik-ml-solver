@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Validation script: verify scramble and inverse reconstruction consistency."""
+"""Validation script: verify scramble and inverse reconstruction consistency in pure Python."""
 
-import numpy as np
 from random import choices
 
 from rubik.cube import (
@@ -16,7 +15,7 @@ from rubik.cube import (
 
 def validate_scramble_reconstruction(n_moves: int, verbose: bool = True):
     # Functional representation with 54 distinct sticker IDs (0..53)
-    sticker_ids = np.arange(54, dtype=np.int64)
+    sticker_ids = tuple(range(54))
     solved_colors = create_solved_cube()
 
     # Generate random sequence of moves
@@ -32,8 +31,8 @@ def validate_scramble_reconstruction(n_moves: int, verbose: bool = True):
     reconstructed_ids = apply_moves(scrambled_ids, inverse_moves)
     reconstructed_colors = apply_moves(scrambled_colors, inverse_moves)
 
-    ids_match = np.array_equal(sticker_ids, reconstructed_ids)
-    colors_match = np.array_equal(solved_colors, reconstructed_colors)
+    ids_match = (reconstructed_ids == sticker_ids)
+    colors_match = (reconstructed_colors == solved_colors)
     facelet_match = (to_facelet_string(reconstructed_colors) == SOLVED_FACELET)
 
     if verbose:
@@ -58,6 +57,7 @@ def validate_scramble_reconstruction(n_moves: int, verbose: bool = True):
 def main():
     print("=" * 70)
     print(" VALIDATING CUBE CONSISTENCY (SCRAMBLE + INVERSE RECONSTRUCTION)")
+    print(" Architecture: Pure Python Standard Library")
     print("=" * 70)
 
     test_lengths = [5, 10, 50, 100, 500, 1000]

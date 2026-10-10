@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Speed test benchmark for Rubik's cube scramble generation."""
+"""Speed test benchmark for pure Python Rubik's cube scramble generation."""
 
 import argparse
 import statistics
 import time
 from typing import Any, Dict, List
-import numpy as np
 
 from rubik.cube import scramble
 
@@ -45,7 +44,7 @@ def format_duration(seconds: float) -> str:
 def run_benchmarks(move_counts: List[int], repetitions: int, avoid_repeated: bool):
     print("=" * 82)
     print(f" RUBIK CUBE SCRAMBLE SPEED TEST (avoid_repeated={avoid_repeated})")
-    print(f" Architecture: Pure Functional Stateless Permutations")
+    print(f" Architecture: Pure Python Standard Library (operator.itemgetter)")
     print("=" * 82)
     header = (
         f"{'Moves':>7} | {'Runs':>5} | {'Mean Total':>12} | "
@@ -70,7 +69,7 @@ def run_benchmarks(move_counts: List[int], repetitions: int, avoid_repeated: boo
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Speed test Rubik's cube scramble generation.")
+    parser = argparse.ArgumentParser(description="Speed test Rubik's cube scramble generation in pure Python.")
     parser.add_argument(
         "--moves",
         nargs="+",
