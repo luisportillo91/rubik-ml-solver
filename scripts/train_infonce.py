@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument("--d-model", type=int, default=64, help="Transformer hidden dimension")
     parser.add_argument("--nhead", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--num-layers", type=int, default=2, help="Number of transformer layers")
+    parser.add_argument("--dim-feedforward", type=int, default=None, help="Feedforward dimension (default 4 * d_model)")
     parser.add_argument("--d-embed", type=int, default=64, help="Output embedding dimension")
     parser.add_argument("--temperature", type=float, default=0.07, help="InfoNCE temperature tau")
     parser.add_argument("--save-dir", type=str, default="checkpoints", help="Directory to save model checkpoints")
@@ -111,11 +112,12 @@ def main():
         print("=" * 96)
 
     # Initialize model
+    dim_ff = args.dim_feedforward if args.dim_feedforward is not None else args.d_model * 4
     raw_model = CubeTransformerEncoder(
         d_model=args.d_model,
         nhead=args.nhead,
         num_layers=args.num_layers,
-        dim_feedforward=args.d_model * 2,
+        dim_feedforward=dim_ff,
         d_embed=args.d_embed,
         pooling="cls",
         dropout=0.1,

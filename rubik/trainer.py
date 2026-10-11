@@ -28,6 +28,7 @@ class TrainingConfig:
     d_model: int = 128
     nhead: int = 4
     num_layers: int = 4
+    dim_feedforward: Optional[int] = None
     d_embed: int = 128
     dropout: float = 0.1
     lr: float = 3e-4
@@ -193,11 +194,12 @@ def train_infonce(
     print("=" * 80)
 
     # Initialize model
+    dim_ff = cfg.dim_feedforward if cfg.dim_feedforward is not None else cfg.d_model * 4
     raw_model = CubeTransformerEncoder(
         d_model=cfg.d_model,
         nhead=cfg.nhead,
         num_layers=cfg.num_layers,
-        dim_feedforward=cfg.d_model * 2,
+        dim_feedforward=dim_ff,
         d_embed=cfg.d_embed,
         pooling="cls",
         dropout=cfg.dropout,
