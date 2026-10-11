@@ -12,7 +12,11 @@ from rubik.cube import (
     scramble,
 )
 from rubik.encoder import _state_to_ids, batch_to_tensor
-from rubik.search import create_distance_filter, is_within_distance
+from rubik.search import (
+    create_distance_filter,
+    generate_neighborhood_tree,
+    is_within_distance,
+)
 
 
 def generate_contrastive_sample(
@@ -29,7 +33,7 @@ def generate_contrastive_sample(
         - Anchor: random scramble.
         - Positive: exactly 1 step ahead (dist == 1).
         - Excluded buffer: any state with distance in [2, d_threshold] is excluded (default k=5).
-        - Negatives: K states with distance > d_threshold.
+        - Negatives: K states with distance > d_threshold generated via random walk from hashmap.
 
     Args:
         d_threshold: Upper distance bound for excluded buffer zone (default 5).
@@ -53,16 +57,24 @@ def generate_contrastive_sample(
     positive = apply_move(anchor, move)
 
     # 3. Sample K negatives strictly with distance > d_threshold
-    # Precompute anchor tree once per anchor for fast O(1) candidate rejection
+    # Random walk from random hashmap states, filtering out states in excluded zone
+    depth = min(3, d_threshold)
+    hashmap = generate_neighborhood_tree(anchor, max_depth=depth)
+    states_pool = list(hashmap.keys())
     is_within = create_distance_filter(anchor, max_distance=d_threshold)
-    negatives: List[Tuple[str, ...]] = []
-    while len(negatives) < k_negatives:
-        neg_moves = rand.randint(max(d_threshold + 5, 14), max_scramble + 5)
-        candidate, _ = scramble(solved, n_moves=neg_moves, rng=rand)
 
-        # Exclude candidates within distance <= d_threshold
-        if not is_within(candidate):
-            negatives.append(candidate)
+    negatives: List[Tuple[str, ...]] = []
+    num_walks = min(5, k_negatives)
+    per_walk = (k_negatives + num_walks - 1) // num_walks
+
+    for _ in range(num_walks):
+        curr = rand.choice(states_pool)
+        collected_in_walk = 0
+        while len(negatives) < k_negatives and collected_in_walk < per_walk:
+            curr = apply_move(curr, rand.choice(VALID_MOVES))
+            if not is_within(curr):
+                negatives.append(curr)
+                collected_in_walk += 1
 
     return anchor, positive, negatives
 
