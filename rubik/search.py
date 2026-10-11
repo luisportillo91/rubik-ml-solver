@@ -1,6 +1,6 @@
 """Neighborhood search and distance algorithms for Rubik's cube states."""
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from rubik.cube import GETTERS, apply_move
 
@@ -64,6 +64,58 @@ def generate_neighborhood_tree(
         frontier = next_frontier
 
     return visited
+
+
+def create_distance_filter(
+    anchor: Union[str, Sequence[Any]], max_distance: int = 5
+) -> Callable[[Union[str, Sequence[Any]]], bool]:
+    """
+    Create an optimized filter function to check whether candidate states
+    are within max_distance of anchor.
+
+    Precomputes the anchor's neighborhood tree once, eliminating repeated BFS
+    searches across dozens or hundreds of candidates.
+
+    Args:
+        anchor: Anchor cube state.
+        max_distance: Maximum distance threshold (default 5).
+
+    Returns:
+        Callable taking a candidate state and returning True if within max_distance.
+    """
+    s1 = _normalize_state(anchor)
+    depth1 = (max_distance + 1) // 2
+    depth2 = max_distance - depth1
+
+    tree = generate_neighborhood_tree(s1, max_depth=depth1)
+
+    def is_within(candidate: Union[str, Sequence[Any]]) -> bool:
+        c = _normalize_state(candidate)
+        if c in tree:
+            return True
+        if depth2 <= 0:
+            return False
+
+        d1 = []
+        for getter in GETTERS.values():
+            nc = getter(c)
+            if nc in tree:
+                return True
+            d1.append(nc)
+
+        if depth2 == 1:
+            return False
+
+        if depth2 == 2:
+            for nc in d1:
+                for getter in GETTERS.values():
+                    if getter(nc) in tree:
+                        return True
+            return False
+
+        return is_within_distance(s1, c, max_distance=max_distance)
+
+    return is_within
 
 
 def is_within_distance(

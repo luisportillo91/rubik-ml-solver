@@ -12,7 +12,7 @@ from rubik.cube import (
     scramble,
 )
 from rubik.encoder import _state_to_ids, batch_to_tensor
-from rubik.search import is_within_distance
+from rubik.search import create_distance_filter, is_within_distance
 
 
 def generate_contrastive_sample(
@@ -53,13 +53,15 @@ def generate_contrastive_sample(
     positive = apply_move(anchor, move)
 
     # 3. Sample K negatives strictly with distance > d_threshold
+    # Precompute anchor tree once per anchor for fast O(1) candidate rejection
+    is_within = create_distance_filter(anchor, max_distance=d_threshold)
     negatives: List[Tuple[str, ...]] = []
     while len(negatives) < k_negatives:
         neg_moves = rand.randint(max(d_threshold + 5, 14), max_scramble + 5)
         candidate, _ = scramble(solved, n_moves=neg_moves, rng=rand)
 
         # Exclude candidates within distance <= d_threshold
-        if not is_within_distance(anchor, candidate, max_distance=d_threshold):
+        if not is_within(candidate):
             negatives.append(candidate)
 
     return anchor, positive, negatives

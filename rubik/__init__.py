@@ -31,6 +31,7 @@ from rubik.encoder import (
 )
 from rubik.loss import InfoNCELoss
 from rubik.search import (
+    create_distance_filter,
     find_distance,
     find_path,
     generate_neighborhood_tree,
@@ -57,6 +58,7 @@ __all__ = [
     "get_neighbors",
     "generate_neighborhood_tree",
     "is_within_distance",
+    "create_distance_filter",
     "find_distance",
     "find_path",
     "CubeTransformerEncoder",

@@ -156,7 +156,7 @@ def main():
             num_workers=args.num_workers,
             pin_memory=use_cuda,
             worker_init_fn=worker_init_fn,
-            prefetch_factor=2,
+            prefetch_factor=4,
         )
         data_iter = iter(data_loader)
     else:

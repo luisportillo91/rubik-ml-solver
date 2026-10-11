@@ -12,6 +12,7 @@ from rubik.cube import (
     to_facelet_string,
 )
 from rubik.search import (
+    create_distance_filter,
     find_distance,
     find_path,
     generate_neighborhood_tree,
@@ -125,3 +126,26 @@ def test_invalid_input_length():
     """Verify ValueError is raised for invalid length states."""
     with pytest.raises(ValueError):
         is_within_distance("short_string", SOLVED_FACELET)
+
+
+def test_create_distance_filter_equivalence():
+    """Verify create_distance_filter matches is_within_distance exactly for k=5."""
+    solved = create_solved_cube()
+    anchor, _ = scramble(solved, n_moves=10)
+    filter_fn = create_distance_filter(anchor, max_distance=5)
+
+    # State at distance 1
+    near_state = apply_moves(anchor, ["R"])
+    assert filter_fn(near_state) is True
+    assert is_within_distance(anchor, near_state, max_distance=5) is True
+
+    # State at distance 5
+    d5_state = apply_moves(anchor, ["R", "U", "F", "L", "D"])
+    assert filter_fn(d5_state) is True
+    assert is_within_distance(anchor, d5_state, max_distance=5) is True
+
+    # State at distance 20 (far negative)
+    far_state, _ = scramble(anchor, n_moves=20)
+    assert filter_fn(far_state) is False
+    assert is_within_distance(anchor, far_state, max_distance=5) is False
+
