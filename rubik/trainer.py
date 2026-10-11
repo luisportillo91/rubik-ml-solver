@@ -298,14 +298,21 @@ def train_infonce(
         window_margin += margin_val
         window_count += 1
 
-        # Live Progress Bar update
+        # Live Progress Bar update (displays running windowed average)
+        running_loss = window_loss / window_count
+        running_top1 = window_top1 / window_count
+        running_top5 = window_top5 / window_count
+        running_pos = window_pos / window_count
+        running_neg = window_neg / window_count
+        running_margin = window_margin / window_count
+
         pbar.set_postfix({
-            "loss": f"{loss_val:.4f}",
-            "top1": f"{top1_val:.1f}%",
-            "top5": f"{top5_val:.1f}%",
-            "pos": f"{pos_val:+.3f}",
-            "neg": f"{neg_val:+.3f}",
-            "margin": f"{margin_val:+.3f}",
+            "loss": f"{running_loss:.4f}",
+            "top1": f"{running_top1:.1f}%",
+            "top5": f"{running_top5:.1f}%",
+            "pos": f"{running_pos:+.3f}",
+            "neg": f"{running_neg:+.3f}",
+            "margin": f"{running_margin:+.3f}",
         })
 
         # Periodic logging / checkpointing
