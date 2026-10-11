@@ -161,9 +161,24 @@ class CubeSolver:
         p2_perms = [compose_moves([p[0], p[1]]) for p in self.paths]
         p3_perms = [compose_moves([p[0], p[1], p[2]]) for p in self.paths]
 
-        self.P1 = torch.tensor(p1_perms, dtype=torch.long, device=self.device)
-        self.P2 = torch.tensor(p2_perms, dtype=torch.long, device=self.device)
-        self.P3 = torch.tensor(p3_perms, dtype=torch.long, device=self.device)
+        # Deduplicate unique permutations across depths (1,194 instead of 3,528)
+        self.u1 = list(dict.fromkeys(p1_perms))
+        self.u2 = list(dict.fromkeys(p2_perms))
+        self.u3 = list(dict.fromkeys(p3_perms))
+
+        map1 = {p: i for i, p in enumerate(self.u1)}
+        map2 = {p: i for i, p in enumerate(self.u2)}
+        map3 = {p: i for i, p in enumerate(self.u3)}
+
+        self.idx1 = torch.tensor([map1[p] for p in p1_perms], dtype=torch.long, device=self.device)
+        self.idx2 = torch.tensor([map2[p] for p in p2_perms], dtype=torch.long, device=self.device)
+        self.idx3 = torch.tensor([map3[p] for p in p3_perms], dtype=torch.long, device=self.device)
+
+        self.len_u1 = len(self.u1)
+        self.len_u2 = len(self.u2)
+
+        all_perms = self.u1 + self.u2 + self.u3
+        self.all_perms = torch.tensor(all_perms, dtype=torch.long, device=self.device)
 
     def _generate_pruned_3move_paths(self) -> List[Tuple[str, str, str]]:
         """Generate all non-redundant, pruned sequences of 3 consecutive moves."""
@@ -238,11 +253,10 @@ class CubeSolver:
             candidates: List[Tuple[float, Tuple[str, ...], List[str]]] = []
 
             for cum_score, curr_state, move_history in beam:
-                # Early intersection check: explore 1, 2, 3 moves
-                # If any state hits the basin, return immediately!
-                for p_idx, path in enumerate(self.paths):
-                    m1, m2, m3 = path
-                    s1 = apply_move(curr_state, m1)
+                # Fast early intersection check: explore 1, 2, 3 moves
+                # Depth 1 check (12 moves)
+                for m1 in VALID_MOVES:
+                    s1 = GETTERS[m1](curr_state)
                     if s1 in self.basin.paths_to_solved:
                         full_moves = move_history + [m1] + self.basin.paths_to_solved[s1]
                         return SolveResult(
@@ -255,20 +269,27 @@ class CubeSolver:
                             history=history,
                         )
 
-                    s2 = apply_move(s1, m2)
-                    if s2 in self.basin.paths_to_solved:
-                        full_moves = move_history + [m1, m2] + self.basin.paths_to_solved[s2]
-                        return SolveResult(
-                            solved=True,
-                            moves=full_moves,
-                            n_macro_steps=step,
-                            duration_seconds=time.perf_counter() - t0,
-                            initial_state=initial_state,
-                            final_state=apply_moves(s1, [m2] + self.basin.paths_to_solved[s2]),
-                            history=history,
-                        )
+                # Depth 2 check (~114 moves)
+                for m1 in VALID_MOVES:
+                    s1 = GETTERS[m1](curr_state)
+                    for m2 in VALID_MOVES:
+                        if m2 != INVERSE_MOVES[m1]:
+                            s2 = GETTERS[m2](s1)
+                            if s2 in self.basin.paths_to_solved:
+                                full_moves = move_history + [m1, m2] + self.basin.paths_to_solved[s2]
+                                return SolveResult(
+                                    solved=True,
+                                    moves=full_moves,
+                                    n_macro_steps=step,
+                                    duration_seconds=time.perf_counter() - t0,
+                                    initial_state=initial_state,
+                                    final_state=apply_moves(s1, [m2] + self.basin.paths_to_solved[s2]),
+                                    history=history,
+                                )
 
-                    s3 = apply_move(s2, m3)
+                # Depth 3 check (1,176 paths)
+                for path in self.paths:
+                    s3 = apply_moves(curr_state, path)
                     if s3 in self.basin.paths_to_solved:
                         full_moves = move_history + list(path) + self.basin.paths_to_solved[s3]
                         return SolveResult(
@@ -277,7 +298,7 @@ class CubeSolver:
                             n_macro_steps=step,
                             duration_seconds=time.perf_counter() - t0,
                             initial_state=initial_state,
-                            final_state=apply_moves(s2, [m3] + self.basin.paths_to_solved[s3]),
+                            final_state=apply_moves(curr_state, list(path) + self.basin.paths_to_solved[s3]),
                             history=history,
                         )
 
@@ -330,47 +351,33 @@ class CubeSolver:
     ) -> Tuple[torch.Tensor, List[Tuple[str, ...]]]:
         """
         Evaluate all candidate 3-move routes using the 3-step windowed average similarity.
+        Uses deduplicated unique states (1,194 instead of 3,528) for 3x faster inference.
         """
         curr_ids = torch.tensor(
             _state_to_ids(state), dtype=torch.long, device=self.device
         )
 
-        # 1. Vectorized state generation via PyTorch index lookups
-        s1_tensor = curr_ids[self.P1]
-        s2_tensor = curr_ids[self.P2]
-        s3_tensor = curr_ids[self.P3]
+        # Vectorized state generation for all 1,194 unique candidate states
+        all_states = curr_ids[self.all_perms]
 
-        n_paths = len(self.paths)
-        cand_batch = torch.cat([s1_tensor, s2_tensor, s3_tensor], dim=0)
+        with torch.inference_mode():
+            all_embs, _ = self.model(all_states)
+            all_embs = F.normalize(all_embs, p=2, dim=-1)
 
-        # 2. Single batched forward pass
-        with torch.no_grad():
-            cand_embs, _ = self.model(cand_batch)
-            cand_embs = F.normalize(cand_embs, p=2, dim=-1)
-
-            e1 = cand_embs[:n_paths]
-            e2 = cand_embs[n_paths : 2 * n_paths]
-            e3 = cand_embs[2 * n_paths :]
-
-            # 3. Compute step similarities according to target_mode
+            # Compute similarities according to target_mode
             if self.target_mode == "basin_max":
-                sim1 = torch.mm(e1, self.basin_embs.T).max(dim=-1).values
-                sim2 = torch.mm(e2, self.basin_embs.T).max(dim=-1).values
-                sim3 = torch.mm(e3, self.basin_embs.T).max(dim=-1).values
+                all_sims = torch.mm(all_embs, self.basin_embs.T).max(dim=-1).values
             elif self.target_mode == "basin_mean":
-                sim1 = torch.mm(e1, self.basin_embs.T).mean(dim=-1)
-                sim2 = torch.mm(e2, self.basin_embs.T).mean(dim=-1)
-                sim3 = torch.mm(e3, self.basin_embs.T).mean(dim=-1)
+                all_sims = torch.mm(all_embs, self.basin_embs.T).mean(dim=-1)
             else:  # 'solved'
-                sim1 = (e1 * self.solved_emb).sum(dim=-1)
-                sim2 = (e2 * self.solved_emb).sum(dim=-1)
-                sim3 = (e3 * self.solved_emb).sum(dim=-1)
+                all_sims = (all_embs * self.solved_emb).sum(dim=-1)
 
-            # 4. 3-Step Windowed Mean Similarity
+            sim1 = all_sims[self.idx1]
+            sim2 = all_sims[self.len_u1 + self.idx2]
+            sim3 = all_sims[self.len_u1 + self.len_u2 + self.idx3]
+
             scores = (sim1 + sim2 + sim3) / 3.0
 
-        # Construct end states for the paths
-        # We can reconstruct end states on CPU
         end_states = [apply_moves(state, p) for p in self.paths]
         return scores, end_states
 
