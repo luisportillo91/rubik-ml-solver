@@ -184,3 +184,30 @@ def test_concatenated_forward_pass_equivalence():
     assert torch.allclose(p_emb_sep, p_emb_cat, atol=1e-5)
     assert torch.allclose(n_emb_sep, n_emb_cat, atol=1e-5)
 
+
+def test_interactive_train_infonce():
+    """Verify train_infonce executes cleanly and returns TrainResult with valid history."""
+    from rubik.trainer import TrainingConfig, train_infonce
+
+    result = train_infonce(
+        steps=3,
+        batch_size=2,
+        k_negatives=4,
+        d_model=16,
+        num_layers=1,
+        nhead=2,
+        d_embed=16,
+        device="cpu",
+        save_dir=None,
+        show_progress_bar=False,
+    )
+
+    assert result.model is not None
+    assert result.best_loss < float("inf")
+    assert result.best_step >= 1
+    assert len(result.history) > 0
+    assert "loss" in result.history[0]
+    assert "top1_acc" in result.history[0]
+    assert "margin" in result.history[0]
+
+

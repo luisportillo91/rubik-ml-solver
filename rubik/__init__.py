@@ -38,6 +38,11 @@ from rubik.search import (
     get_neighbors,
     is_within_distance,
 )
+from rubik.trainer import (
+    TrainingConfig,
+    TrainResult,
+    train_infonce,
+)
 
 __all__ = [
     "VALID_MOVES",
@@ -70,4 +75,7 @@ __all__ = [
     "generate_contrastive_sample",
     "generate_contrastive_batch",
     "ContrastiveCubeIterableDataset",
+    "train_infonce",
+    "TrainingConfig",
+    "TrainResult",
 ]
