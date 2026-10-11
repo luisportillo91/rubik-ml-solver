@@ -6,8 +6,10 @@ import torch
 from torch.utils.data import IterableDataset
 
 from rubik.cube import (
+    PERMUTATIONS,
     VALID_MOVES,
     apply_move,
+    compose_moves,
     create_solved_cube,
     scramble,
 )
@@ -106,25 +108,41 @@ def generate_contrastive_batch(
             - pos_tensor: (B, 54) LongTensor
             - neg_tensor: (B, K, 54) LongTensor
     """
-    anchors_ids: List[List[int]] = []
-    pos_ids: List[List[int]] = []
-    negs_ids: List[List[List[int]]] = []
+    rand = rng if rng is not None else random
+    solved = create_solved_cube()
 
+    # 1. Generate B random anchor states
+    anchors_ids: List[List[int]] = []
     for _ in range(batch_size):
-        anchor, pos, negs = generate_contrastive_sample(
-            d_threshold=d_threshold,
-            k_negatives=k_negatives,
-            min_scramble=min_scramble,
-            max_scramble=max_scramble,
-            rng=rng,
-        )
+        n_moves = rand.randint(min_scramble, max_scramble)
+        anchor, _ = scramble(solved, n_moves=n_moves, rng=rand)
         anchors_ids.append(_state_to_ids(anchor))
-        pos_ids.append(_state_to_ids(pos))
-        negs_ids.append([_state_to_ids(n) for n in negs])
 
     anchor_tensor = torch.tensor(anchors_ids, dtype=torch.long, device=device)
-    pos_tensor = torch.tensor(pos_ids, dtype=torch.long, device=device)
-    neg_tensor = torch.tensor(negs_ids, dtype=torch.long, device=device)
+
+    # 2. Pick a random 1-step move for each anchor (vectorized)
+    move_names = list(VALID_MOVES)
+    pos_perms = [PERMUTATIONS[rand.choice(move_names)] for _ in range(batch_size)]
+    pos_perms_t = torch.tensor(pos_perms, dtype=torch.long, device=device)
+    pos_tensor = anchor_tensor.gather(1, pos_perms_t)
+
+    # 3. Sample K relative negative permutations strictly with dist > d_threshold
+    # By group translation invariance, dist(A, A * tau) == dist(e, tau) > d_threshold
+    # for ANY anchor A.
+    neg_perms: List[Tuple[int, ...]] = []
+    filter_fn = create_distance_filter(solved, max_distance=d_threshold)
+    while len(neg_perms) < k_negatives:
+        neg_moves = rand.randint(max(d_threshold + 5, 14), max_scramble + 5)
+        cand, mvs = scramble(solved, n_moves=neg_moves, rng=rand)
+        if not filter_fn(cand):
+            neg_perms.append(compose_moves(mvs))
+
+    neg_perms_t = torch.tensor(neg_perms, dtype=torch.long, device=device)
+
+    # 4. Vectorized PyTorch gather across all B anchors and K negatives
+    neg_tensor = anchor_tensor.unsqueeze(1).expand(-1, k_negatives, -1).gather(
+        2, neg_perms_t.unsqueeze(0).expand(batch_size, -1, -1)
+    )
 
     return anchor_tensor, pos_tensor, neg_tensor
 
