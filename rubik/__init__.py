@@ -38,6 +38,11 @@ from rubik.search import (
     get_neighbors,
     is_within_distance,
 )
+from rubik.solver import (
+    CubeSolver,
+    SolveResult,
+    SolvedBasin,
+)
 from rubik.trainer import (
     TrainingConfig,
     TrainResult,
@@ -78,4 +83,7 @@ __all__ = [
     "train_infonce",
     "TrainingConfig",
     "TrainResult",
+    "CubeSolver",
+    "SolveResult",
+    "SolvedBasin",
 ]
