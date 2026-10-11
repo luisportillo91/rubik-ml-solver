@@ -17,6 +17,11 @@ from rubik.cube import (
     scramble,
     to_facelet_string,
 )
+from rubik.dataset import (
+    ContrastiveCubeIterableDataset,
+    generate_contrastive_batch,
+    generate_contrastive_sample,
+)
 from rubik.encoder import (
     COLOR_TO_ID,
     CubeTransformerEncoder,
@@ -24,6 +29,7 @@ from rubik.encoder import (
     batch_to_tensor,
     cube_to_tensor,
 )
+from rubik.loss import InfoNCELoss
 from rubik.search import (
     find_distance,
     find_path,
@@ -58,4 +64,8 @@ __all__ = [
     "batch_to_tensor",
     "COLOR_TO_ID",
     "ID_TO_COLOR",
+    "InfoNCELoss",
+    "generate_contrastive_sample",
+    "generate_contrastive_batch",
+    "ContrastiveCubeIterableDataset",
 ]

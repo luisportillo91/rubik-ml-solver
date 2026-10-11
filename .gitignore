@@ -29,3 +29,8 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Model Checkpoints
+checkpoints/
+*.pt
+*.pth
