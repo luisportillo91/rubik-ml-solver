@@ -142,14 +142,9 @@ def generate_contrastive_batch(
             moves_history.append(m)
             curr = apply_move(curr, m)
             step += 1
-            if step > d_threshold:
-                if step < 16:
-                    if not filter_fn(curr):
-                        neg_perms.append(compose_moves(moves_history))
-                        traj_negs += 1
-                else:
-                    neg_perms.append(compose_moves(moves_history))
-                    traj_negs += 1
+            if step > d_threshold and not filter_fn(curr):
+                neg_perms.append(compose_moves(moves_history))
+                traj_negs += 1
 
     neg_perms_t = torch.tensor(neg_perms, dtype=torch.long, device=device)
 
