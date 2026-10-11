@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Rubik's Cube study and ML-based solver"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "torch>=2.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -17,3 +19,11 @@ packages = ["rubik"]
 dev = [
     "pytest>=8.0.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

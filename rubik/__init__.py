@@ -1,4 +1,4 @@
-"""Rubik package: Pure Python functional representation and search algorithms."""
+"""Rubik package: Pure Python functional representation, search, and ML encoder."""
 
 from rubik.cube import (
     GETTERS,
@@ -16,6 +16,13 @@ from rubik.cube import (
     from_facelet_string,
     scramble,
     to_facelet_string,
+)
+from rubik.encoder import (
+    COLOR_TO_ID,
+    CubeTransformerEncoder,
+    ID_TO_COLOR,
+    batch_to_tensor,
+    cube_to_tensor,
 )
 from rubik.search import (
     find_distance,
@@ -46,4 +53,9 @@ __all__ = [
     "is_within_distance",
     "find_distance",
     "find_path",
+    "CubeTransformerEncoder",
+    "cube_to_tensor",
+    "batch_to_tensor",
+    "COLOR_TO_ID",
+    "ID_TO_COLOR",
 ]
