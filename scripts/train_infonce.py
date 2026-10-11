@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.07, help="InfoNCE temperature tau")
     parser.add_argument("--save-dir", type=str, default="checkpoints", help="Directory to save model checkpoints")
     parser.add_argument("--device", type=str, default="auto", help="Device to use ('auto', 'cuda', or 'cpu')")
-    parser.add_argument("--num-workers", type=int, default=2, help="DataLoader background worker processes per GPU (default 2)")
+    parser.add_argument("--num-workers", type=int, default=1, help="DataLoader background worker processes per GPU (default 1)")
     parser.add_argument("--amp", action="store_true", default=True, help="Enable Automatic Mixed Precision (AMP) on CUDA")
     parser.add_argument("--no-amp", dest="amp", action="store_false", help="Disable AMP")
     parser.add_argument("--history-file", type=str, default="training_history.json", help="Path to save metric history JSON")
@@ -89,6 +89,11 @@ def main():
 
     use_cuda = device.type == "cuda"
     use_amp = args.amp and use_cuda
+
+    # Prevent thread oversubscription on machines with limited vCPUs (e.g. 4 vCPUs)
+    if is_distributed or use_cuda:
+        torch.set_num_threads(1)
+
     effective_batch_size = args.batch_size * world_size
     total_negatives_per_step = effective_batch_size * args.k_negatives
 
