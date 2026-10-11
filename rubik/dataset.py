@@ -59,24 +59,19 @@ def generate_contrastive_sample(
     positive = apply_move(anchor, move)
 
     # 3. Sample K negatives strictly with distance > d_threshold
-    # Random walk from random hashmap states, filtering out states in excluded zone
-    depth = min(3, d_threshold)
-    hashmap = generate_neighborhood_tree(anchor, max_depth=depth)
-    states_pool = list(hashmap.keys())
+    # Sequential walk from anchor:
+    # Steps 2..d_threshold are in excluded buffer zone.
+    # Steps > d_threshold: each movement step along the walk is a negative state!
     is_within = create_distance_filter(anchor, max_distance=d_threshold)
-
     negatives: List[Tuple[str, ...]] = []
-    num_walks = min(5, k_negatives)
-    per_walk = (k_negatives + num_walks - 1) // num_walks
-
-    for _ in range(num_walks):
-        curr = rand.choice(states_pool)
-        collected_in_walk = 0
-        while len(negatives) < k_negatives and collected_in_walk < per_walk:
-            curr = apply_move(curr, rand.choice(VALID_MOVES))
+    curr = anchor
+    step = 0
+    while len(negatives) < k_negatives:
+        curr = apply_move(curr, rand.choice(VALID_MOVES))
+        step += 1
+        if step > d_threshold:
             if not is_within(curr):
                 negatives.append(curr)
-                collected_in_walk += 1
 
     return anchor, positive, negatives
 
@@ -87,6 +82,7 @@ def generate_contrastive_batch(
     d_threshold: int = 5,
     min_scramble: int = 1,
     max_scramble: int = 25,
+    n_trajectories: int = 1,
     device: Optional[torch.device] = None,
     rng: Optional[random.Random] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -95,10 +91,11 @@ def generate_contrastive_batch(
 
     Args:
         batch_size: Number of anchor states in the batch (B).
-        k_negatives: Number of negatives per anchor (K).
-        d_threshold: Distance threshold d for negative sampling (default 5).
+        k_negatives: Total number of negative movement steps per anchor (K).
+        d_threshold: Distance threshold d for excluded buffer zone [2, d_threshold] (default 5).
         min_scramble: Minimum moves for scramble generation.
         max_scramble: Maximum moves for scramble generation.
+        n_trajectories: Number of canonical trajectories to distribute negative movements across (default 1).
         device: Target torch device.
         rng: Optional random.Random instance.
 
@@ -126,16 +123,33 @@ def generate_contrastive_batch(
     pos_perms_t = torch.tensor(pos_perms, dtype=torch.long, device=device)
     pos_tensor = anchor_tensor.gather(1, pos_perms_t)
 
-    # 3. Sample K relative negative permutations strictly with dist > d_threshold
-    # By group translation invariance, dist(A, A * tau) == dist(e, tau) > d_threshold
-    # for ANY anchor A.
+    # 3. Canonical sequential trajectories:
+    # A canonical trajectory is a sequence of movements.
+    # Movement 1: positive, Movements 2..d_threshold: excluded buffer zone.
+    # Subsequent movements (> d_threshold): each movement produces a negative permutation.
     neg_perms: List[Tuple[int, ...]] = []
     filter_fn = create_distance_filter(solved, max_distance=d_threshold)
-    while len(neg_perms) < k_negatives:
-        neg_moves = rand.randint(max(d_threshold + 5, 14), max_scramble + 5)
-        cand, mvs = scramble(solved, n_moves=neg_moves, rng=rand)
-        if not filter_fn(cand):
-            neg_perms.append(compose_moves(mvs))
+    n_trajs = max(1, n_trajectories)
+    moves_per_traj = (k_negatives + n_trajs - 1) // n_trajs
+
+    for _ in range(n_trajs):
+        curr = solved
+        moves_history: List[str] = []
+        step = 0
+        traj_negs = 0
+        while traj_negs < moves_per_traj and len(neg_perms) < k_negatives:
+            m = rand.choice(VALID_MOVES)
+            moves_history.append(m)
+            curr = apply_move(curr, m)
+            step += 1
+            if step > d_threshold:
+                if step < 16:
+                    if not filter_fn(curr):
+                        neg_perms.append(compose_moves(moves_history))
+                        traj_negs += 1
+                else:
+                    neg_perms.append(compose_moves(moves_history))
+                    traj_negs += 1
 
     neg_perms_t = torch.tensor(neg_perms, dtype=torch.long, device=device)
 
@@ -162,6 +176,7 @@ class ContrastiveCubeIterableDataset(IterableDataset):
         d_threshold: int = 5,
         min_scramble: int = 1,
         max_scramble: int = 25,
+        n_trajectories: int = 1,
     ):
         super().__init__()
         self.total_steps = total_steps
@@ -170,6 +185,7 @@ class ContrastiveCubeIterableDataset(IterableDataset):
         self.d_threshold = d_threshold
         self.min_scramble = min_scramble
         self.max_scramble = max_scramble
+        self.n_trajectories = n_trajectories
 
     def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         step = 0
@@ -180,6 +196,7 @@ class ContrastiveCubeIterableDataset(IterableDataset):
                 d_threshold=self.d_threshold,
                 min_scramble=self.min_scramble,
                 max_scramble=self.max_scramble,
+                n_trajectories=self.n_trajectories,
             )
             step += 1
 

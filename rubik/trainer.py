@@ -21,7 +21,8 @@ class TrainingConfig:
     """Configuration for InfoNCE contrastive training."""
     steps: int = 1000
     batch_size: int = 32          # M anchors per step
-    k_negatives: int = 64         # N canonical negatives per anchor (M x N negatives)
+    k_negatives: int = 64         # Total negative movements per anchor along trajectory
+    n_trajectories: int = 1       # Number of canonical trajectories (movements partitioned across trajectories)
     distance_threshold: int = 5   # Excluded buffer zone [2, distance_threshold]
     min_scramble: int = 1
     max_scramble: int = 25
@@ -254,6 +255,7 @@ def train_infonce(
             d_threshold=cfg.distance_threshold,
             min_scramble=cfg.min_scramble,
             max_scramble=cfg.max_scramble,
+            n_trajectories=cfg.n_trajectories,
             device=device,
         )
 

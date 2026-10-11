@@ -58,6 +58,19 @@ def test_generate_contrastive_batch_shapes():
     assert neg_t.dtype == torch.long
 
 
+def test_generate_contrastive_batch_multi_trajectory():
+    """Verify batch generation with multiple canonical trajectories."""
+    anchor_t, pos_t, neg_t = generate_contrastive_batch(
+        batch_size=4,
+        k_negatives=6,
+        d_threshold=5,
+        n_trajectories=2,
+    )
+    assert anchor_t.shape == (4, 54)
+    assert pos_t.shape == (4, 54)
+    assert neg_t.shape == (4, 6, 54)
+
+
 def test_contrastive_iterable_dataset():
     """Verify ContrastiveCubeIterableDataset streams expected batches."""
     steps = 2
