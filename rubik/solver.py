@@ -243,19 +243,23 @@ class CubeSolver:
             )
 
         # 2. Macro Search Loop
-        # A beam entry is: (cumulative_score, current_state, move_history)
-        beam: List[Tuple[float, Tuple[str, ...], List[str]]] = [
-            (0.0, initial_state, [])
+        # A beam entry is: (cumulative_score, current_state, move_history, visited_states_in_path)
+        beam: List[Tuple[float, Tuple[str, ...], List[str], set]] = [
+            (0.0, initial_state, [], {initial_state})
         ]
         history: List[Dict[str, Any]] = []
 
         for step in range(1, max_macro_steps + 1):
-            candidates: List[Tuple[float, Tuple[str, ...], List[str]]] = []
+            candidates: List[Tuple[float, Tuple[str, ...], List[str], set]] = []
 
-            for cum_score, curr_state, move_history in beam:
+            for cum_score, curr_state, move_history, visited in beam:
+                last_move = move_history[-1] if move_history else None
+
                 # Fast early intersection check: explore 1, 2, 3 moves
                 # Depth 1 check (12 moves)
                 for m1 in VALID_MOVES:
+                    if last_move and m1 == INVERSE_MOVES[last_move]:
+                        continue
                     s1 = GETTERS[m1](curr_state)
                     if s1 in self.basin.paths_to_solved:
                         full_moves = move_history + [m1] + self.basin.paths_to_solved[s1]
@@ -271,6 +275,8 @@ class CubeSolver:
 
                 # Depth 2 check (~114 moves)
                 for m1 in VALID_MOVES:
+                    if last_move and m1 == INVERSE_MOVES[last_move]:
+                        continue
                     s1 = GETTERS[m1](curr_state)
                     for m2 in VALID_MOVES:
                         if m2 != INVERSE_MOVES[m1]:
@@ -289,6 +295,8 @@ class CubeSolver:
 
                 # Depth 3 check (1,176 paths)
                 for path in self.paths:
+                    if last_move and path[0] == INVERSE_MOVES[last_move]:
+                        continue
                     s3 = apply_moves(curr_state, path)
                     if s3 in self.basin.paths_to_solved:
                         full_moves = move_history + list(path) + self.basin.paths_to_solved[s3]
@@ -305,18 +313,43 @@ class CubeSolver:
                 # Outside basin: Evaluate all 3-step candidate routes via neural network
                 scores, end_states = self._evaluate_macro_routes(curr_state)
 
-                # Select top candidates for this beam branch
-                topk = torch.topk(scores, min(beam_width * 2, len(scores)))
+                # Select top candidates, filtering boundary inverses and repeated states
+                topk = torch.topk(scores, min(beam_width * 8, len(scores)))
                 for score_val, idx_val in zip(topk.values.tolist(), topk.indices.tolist()):
                     path_moves = list(self.paths[idx_val])
+                    # Prune boundary inverse (undoing last move)
+                    if last_move and path_moves[0] == INVERSE_MOVES[last_move]:
+                        continue
                     next_state = end_states[idx_val]
-                    candidates.append((cum_score + score_val, next_state, move_history + path_moves))
+                    # Cycle prevention: do not revisit already visited states in this path
+                    if next_state in visited:
+                        continue
+                    candidates.append((
+                        cum_score + score_val,
+                        next_state,
+                        move_history + path_moves,
+                        visited | {next_state},
+                    ))
 
-            # Prune beam to beam_width
+            # Prune beam to beam_width, ensuring unique cube states across the beam
             candidates.sort(key=lambda x: x[0], reverse=True)
-            beam = candidates[:beam_width]
+            new_beam: List[Tuple[float, Tuple[str, ...], List[str], set]] = []
+            seen_states = set()
+            for item in candidates:
+                st = item[1]
+                if st not in seen_states:
+                    seen_states.add(st)
+                    new_beam.append(item)
+                    if len(new_beam) == beam_width:
+                        break
 
-            best_score, best_state, best_moves = beam[0]
+            # Fallback if all candidates were pruned
+            if not new_beam:
+                candidates.sort(key=lambda x: x[0], reverse=True)
+                new_beam = candidates[:beam_width]
+
+            beam = new_beam
+            best_score, best_state, best_moves, _ = beam[0]
             history.append({
                 "step": step,
                 "best_score": best_score / step,
@@ -335,7 +368,7 @@ class CubeSolver:
                 )
 
         # If max_macro_steps reached without reaching solved
-        best_score, best_state, best_moves = beam[0]
+        best_score, best_state, best_moves, _ = beam[0]
         return SolveResult(
             solved=(best_state == solved_cube),
             moves=best_moves,
